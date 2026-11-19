@@ -1,0 +1,477 @@
+<title>혈전 약리 시뮬레이터</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="혈액응고·혈전 형성 생리를 시뮬레이션하고 항혈소판제·항응고제·혈전용해제의 표적, 목표, 주의사항을 안내하는 교육용 프로그램">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: 위는 임상 모니터(혈관 캔버스 + 약물 제어 레일), 아래는 교과서형 가이드 섹션이 이어지는 2단 구성 */
+:root{
+  --bg:#f2f4f7; --surface:#ffffff; --surface-2:#eef1f5; --ink:#151a24; --muted:#5a6375; --line:#d8dde6;
+  --blood:#b11f2c; --blood-soft:#f7e0e2;
+  --platelet:#6b4fae; --platelet-soft:#ece6f8;
+  --fibrin:#b07210; --fibrin-soft:#f7ecd5;
+  --lysis:#0f7d70; --lysis-soft:#d8efeb;
+  --drug:#1c58c0; --drug-soft:#e1eafb;
+  --ok:#2a7845; --warn:#a2650a; --crit:#b42318;
+  --ok-soft:#e1f1e6; --warn-soft:#f8ecd4; --crit-soft:#fbe3e0;
+  --tissue:#efe2df; --wall:#e3c3bf; --wall-2:#d8b0ab; --lumen:#fbf1e6; --endo:#c9837c; --collagen:#c99a3c; --lipid:#e9cf6a; --extra:#f4ebe7;
+  --font-display:"IBM Plex Sans KR","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-body:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"Consolas","D2Coding",monospace;
+  --r:10px; --r-sm:7px;
+  --shadow:0 1px 2px rgba(20,26,40,.05),0 4px 14px rgba(20,26,40,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1117; --surface:#161a22; --surface-2:#1d222c; --ink:#e6e9ef; --muted:#9aa2b2; --line:#2a303b;
+    --blood:#e3545f; --blood-soft:#3a1b20; --platelet:#a98ef0; --platelet-soft:#29223f;
+    --fibrin:#e2a63e; --fibrin-soft:#382b13; --lysis:#3cc1ab; --lysis-soft:#11322e;
+    --drug:#6ea2ff; --drug-soft:#17264a; --ok:#5cc07f; --warn:#e2a640; --crit:#f2675d;
+    --ok-soft:#14301f; --warn-soft:#352813; --crit-soft:#3a1916;
+    --tissue:#241a1c; --wall:#4a2d31; --wall-2:#5a353a; --lumen:#1f1517; --endo:#b0675f; --collagen:#c99a3c; --lipid:#a88f3a; --extra:#1b1416;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --surface:#161a22; --surface-2:#1d222c; --ink:#e6e9ef; --muted:#9aa2b2; --line:#2a303b;
+  --blood:#e3545f; --blood-soft:#3a1b20; --platelet:#a98ef0; --platelet-soft:#29223f;
+  --fibrin:#e2a63e; --fibrin-soft:#382b13; --lysis:#3cc1ab; --lysis-soft:#11322e;
+  --drug:#6ea2ff; --drug-soft:#17264a; --ok:#5cc07f; --warn:#e2a640; --crit:#f2675d;
+  --ok-soft:#14301f; --warn-soft:#352813; --crit-soft:#3a1916;
+  --tissue:#241a1c; --wall:#4a2d31; --wall-2:#5a353a; --lumen:#1f1517; --endo:#b0675f; --collagen:#c99a3c; --lipid:#a88f3a; --extra:#1b1416;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.65;margin:0}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1260px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 72px}
+h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;line-height:1.28;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(28px,4vw,40px);font-weight:700}
+h2{font-size:clamp(21px,2.4vw,26px);font-weight:700}
+h3{font-size:17px;font-weight:600}
+h4{font-size:15px;font-weight:600}
+p{margin:0}
+a{color:var(--drug);text-underline-offset:2px}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--drug);outline-offset:2px;border-radius:4px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+sub,sup{line-height:0}
+
+/* masthead */
+.masthead{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px 32px;align-items:end;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:12.5px;font-weight:600;letter-spacing:.06em;color:var(--blood);margin-bottom:8px}
+.lede{margin-top:10px;max-width:66ch;color:var(--muted);font-size:15.5px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:420px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag b{color:var(--ink);font-weight:600}
+@media (max-width:760px){.masthead{grid-template-columns:1fr}.meta{justify-content:flex-start}}
+
+/* toc */
+.toc{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.toc ul{list-style:none;margin:0;padding:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.toc ul::-webkit-scrollbar{display:none}
+.toc a{display:block;white-space:nowrap;text-decoration:none;color:var(--muted);font-size:13.5px;font-weight:500;padding:5px 11px;border-radius:999px}
+.toc a:hover{background:var(--surface);color:var(--ink)}
+
+section.block{padding-top:36px;scroll-margin-top:60px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px;margin-bottom:14px}
+.sec-head p{color:var(--muted);max-width:70ch;font-size:14.5px}
+.kicker{font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:.02em}
+
+/* simulator */
+.sim-grid{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;align-items:start}
+@media (max-width:1000px){.sim-grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.stage{padding:14px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--surface-2);padding:4px;border-radius:9px;width:fit-content;max-width:100%}
+.seg button{border:0;background:transparent;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.stage-top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.scen-desc{font-size:13.5px;color:var(--muted);max-width:60ch}
+.scen-opts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.scen-opts:empty{display:none}
+.scen-opts .lbl{font-size:12.5px;color:var(--muted);margin-right:2px}
+.canvas-box{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--lumen)}
+.canvas-box canvas{display:block;width:100%;height:auto}
+.hud{position:absolute;inset:8px 8px auto 8px;display:flex;justify-content:space-between;gap:8px;pointer-events:none;flex-wrap:wrap}
+.hud .pill{pointer-events:auto}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink);white-space:nowrap}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pill.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)} .pill.ok .dot{background:var(--ok)}
+.pill.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)} .pill.warn .dot{background:var(--warn)}
+.pill.crit{background:var(--crit-soft);border-color:transparent;color:var(--crit)} .pill.crit .dot{background:var(--crit)}
+.pill.drug{background:var(--drug-soft);border-color:transparent;color:var(--drug)}
+.hud-drugs{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:60%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:50%;display:inline-block;flex:none}
+.sw.rbc{background:var(--blood)} .sw.plt{background:var(--platelet-soft);border:1.5px solid var(--platelet)} .sw.pla{background:var(--platelet)}
+.sw.fib{width:16px;height:3px;border-radius:2px;background:var(--fibrin)} .sw.lys{background:var(--lysis)}
+.transport{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);padding:6px 13px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;color:var(--ink)}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn svg{width:14px;height:14px;fill:currentColor}
+.tlabel{margin-left:auto;font-size:12.5px;color:var(--muted)}
+.phases{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.phases button{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;cursor:pointer;display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;color:var(--muted);min-height:48px}
+.phases .n{font-family:var(--font-mono);font-size:11.5px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);flex:none;margin-top:1px}
+.phases li.done button{color:var(--ink)}
+.phases li.done .n{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.phases li.cur button{border-color:var(--blood);box-shadow:inset 0 0 0 1px var(--blood);color:var(--ink);font-weight:600}
+.phases li.cur .n{background:var(--blood);border-color:var(--blood);color:#fff}
+.phases li.sel button{background:var(--surface-2)}
+.phase-note{background:var(--surface-2);border-radius:8px;padding:12px 14px;display:grid;gap:6px}
+.phase-note h3{font-size:15.5px}
+.phase-note p{font-size:14px;max-width:75ch}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--drug);color:var(--drug)}
+.chip .cdot{width:7px;height:7px;border-radius:50%}
+.c-ap{background:var(--platelet)} .c-ac{background:var(--fibrin)} .c-ly{background:var(--lysis)} .c-rv{background:var(--muted)} .c-rs{background:var(--drug)}
+.disclaimer{font-size:12.5px;color:var(--muted);margin-top:10px;max-width:90ch}
+
+/* rail */
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel{padding:13px 14px}
+.panel-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.panel-h h3{font-size:15px}
+.panel-h .kicker{font-size:11.5px}
+.meters{display:grid;gap:7px}
+.meter{display:grid;grid-template-columns:86px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:13px}
+.meter .bar{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.meter .bar i{display:block;height:100%;width:0;border-radius:5px;transition:width .2s linear}
+.meter .v{font-family:var(--font-mono);font-size:12px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.outcome{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:grid;gap:8px}
+.out-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px}
+.out-big{font-family:var(--font-mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.risk{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-top:4px}
+.risk i{height:7px;border-radius:3px;background:var(--surface-2)}
+.risk-lbl{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)}
+details.dgroup{border-top:1px solid var(--line);padding-block:8px}
+details.dgroup:first-of-type{border-top:0;padding-top:0}
+details.dgroup summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;padding:2px 0}
+details.dgroup summary::-webkit-details-marker{display:none}
+details.dgroup summary::before{content:"";width:7px;height:7px;border-right:1.6px solid var(--muted);border-bottom:1.6px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin-right:2px}
+details.dgroup[open] summary::before{transform:rotate(45deg)}
+details.dgroup summary .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-weight:500}
+.dlist{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.dchip{position:relative;display:inline-flex}
+.dchip input{position:absolute;opacity:0;width:1px;height:1px}
+.dchip span{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;user-select:none}
+.dchip span::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cc,var(--muted))}
+.dchip input:checked+span{background:var(--drug);border-color:var(--drug);color:#fff}
+.dchip input:checked+span::before{background:#fff}
+.dchip input:focus-visible+span{outline:2px solid var(--drug);outline-offset:2px}
+.dchip.ap{--cc:var(--platelet)} .dchip.ac{--cc:var(--fibrin)} .dchip.rv{--cc:var(--muted)} .dchip.rs{--cc:var(--drug)}
+.submods{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:7px;padding:7px 9px;border-radius:7px;background:var(--surface-2);font-size:12.5px}
+.submods label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.lytic-list{display:grid;gap:6px;margin-top:8px}
+.lytic{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center;font-size:13px}
+.lytic .lvl{grid-column:1/-1;height:4px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.lytic .lvl i{display:block;height:100%;width:0;background:var(--lysis)}
+.lytic b{font-weight:600}
+.lytic small{color:var(--muted);font-size:12px}
+.alerts{display:grid;gap:7px}
+.alert{border-left:3px solid var(--muted);background:var(--surface-2);border-radius:0 7px 7px 0;padding:7px 10px;font-size:13px;line-height:1.5}
+.alert b{font-weight:600}
+.alert.crit{border-color:var(--crit)} .alert.warn{border-color:var(--warn)} .alert.info{border-color:var(--drug)}
+.alert .src{color:var(--muted);font-size:11.5px}
+.empty{font-size:13px;color:var(--muted)}
+
+/* compare table & generic tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td,tr:last-child th{border-bottom:0}
+thead th{font-family:var(--font-display);font-weight:600;font-size:13.5px;background:var(--surface-2);white-space:nowrap}
+tbody th{font-weight:600;white-space:nowrap;color:var(--muted);font-size:13px}
+td .note{display:block;color:var(--muted);font-size:12.5px;margin-top:3px}
+.cmp{min-width:860px}
+.cmp thead th:nth-child(2){color:var(--platelet)} .cmp thead th:nth-child(3){color:var(--fibrin)} .cmp thead th:nth-child(4){color:var(--lysis)}
+.cmp td{width:30%}
+.tbl-cap{font-size:12.5px;color:var(--muted);margin-top:8px}
+
+/* map */
+.map-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+@media (max-width:1000px){.map-grid{grid-template-columns:minmax(0,1fr)}}
+.map-box{overflow-x:auto;padding:8px}
+.map-box svg{display:block;min-width:900px;width:100%;height:auto}
+.map-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);padding:4px 8px 6px}
+.map-legend span{display:inline-flex;gap:6px;align-items:center}
+.node rect{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.node text{fill:var(--ink);font-family:var(--font-body);font-size:13px}
+.node text.sub{fill:var(--muted);font-size:11.5px}
+.node{cursor:pointer}
+.node:hover rect{stroke:var(--ink)}
+.node.k-plt rect{stroke:var(--platelet)} .node.k-coag rect{stroke:var(--fibrin)} .node.k-lys rect{stroke:var(--lysis)}
+.node.k-nat rect{fill:var(--surface-2);stroke-dasharray:4 3;stroke:var(--muted)}
+.node.k-end rect{fill:var(--blood-soft);stroke:var(--blood)}
+.node.sel rect{stroke-width:2.4;stroke:var(--ink)}
+.node.blocked rect{stroke:var(--drug);stroke-width:2.4;fill:var(--drug-soft)}
+.lane{stroke:none}
+.lane-l{font-family:var(--font-display);font-size:13px;font-weight:600;fill:var(--muted)}
+.edge{fill:none;stroke:var(--muted);stroke-width:1.4}
+.edge.inh{stroke-dasharray:5 3}
+.edge.fb{stroke-dasharray:3 3;stroke:var(--fibrin)}
+.edge-l{font-size:11px;fill:var(--muted);font-family:var(--font-body)}
+.mpill{cursor:pointer}
+.mpill rect{fill:var(--surface);stroke:var(--line)}
+.mpill text{font-size:11.5px;fill:var(--ink);font-family:var(--font-body)}
+.mpill circle{stroke:none}
+.mpill:hover rect{stroke:var(--drug)}
+.mpill.on rect{fill:var(--drug);stroke:var(--drug)} .mpill.on text{fill:#fff} .mpill.on circle{fill:#fff}
+.mpill.sel rect{stroke:var(--drug);stroke-width:2}
+.mpill.res rect{stroke-dasharray:3 2}
+.info{padding:14px;display:grid;gap:10px}
+.info h3{font-size:16px}
+.info p{font-size:14px}
+.info .lab{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.03em}
+
+/* guide */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.search{flex:1 1 220px;max-width:340px;position:relative}
+.search input{width:100%;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface)}
+.guide-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:16px;align-items:start}
+@media (max-width:1000px){.guide-grid{grid-template-columns:minmax(0,1fr)}}
+.dcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.dcard{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;cursor:pointer;display:grid;gap:4px;align-content:start}
+.dcard:hover{border-color:var(--muted)}
+.dcard[aria-current="true"]{border-color:var(--drug);box-shadow:inset 0 0 0 1px var(--drug)}
+.dcard .nm{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:7px}
+.dcard .nm .cdot{width:8px;height:8px;border-radius:50%;flex:none}
+.dcard .en{font-size:12px;color:var(--muted)}
+.dcard .tg{font-size:12.5px;color:var(--ink)}
+.dcard .tg b{color:var(--muted);font-weight:500}
+.dcard .br{font-size:12.5px;color:var(--muted)}
+.dcard .br b{color:var(--muted);font-weight:500}
+.detail{position:sticky;top:64px;padding:16px 18px;display:grid;gap:14px;max-height:calc(100vh - 80px);overflow:auto}
+@media (max-width:1000px){.detail{position:static;max-height:none}}
+.d-head{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;justify-content:space-between}
+.d-head h3{font-size:21px}
+.d-head .en{color:var(--muted);font-size:13.5px}
+.d-key{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:640px){.d-key{grid-template-columns:1fr}}
+.kbox{border-radius:8px;padding:10px 12px;background:var(--surface-2);display:grid;gap:3px;align-content:start}
+.kbox .lab{font-size:12px;font-weight:700;letter-spacing:.03em}
+.kbox p{font-size:13.5px}
+.kbox.t .lab{color:var(--drug)} .kbox.g .lab{color:var(--ok)} .kbox.c .lab{color:var(--crit)}
+.d-sec{display:grid;gap:6px}
+.d-sec h4{font-size:13.5px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+.d-sec ul{margin:0;padding-left:18px;display:grid;gap:3px;font-size:14px}
+.d-sec p{font-size:14px}
+.d-sec dl{margin:0;display:grid;grid-template-columns:minmax(120px,max-content) minmax(0,1fr);gap:4px 12px;font-size:14px}
+.d-sec dt{font-weight:600}
+.d-sec dd{margin:0;color:var(--ink)}
+@media (max-width:520px){.d-sec dl{grid-template-columns:1fr}.d-sec dd{margin-bottom:6px}}
+.d-actions{display:flex;flex-wrap:wrap;gap:8px}
+.src-tags{display:flex;flex-wrap:wrap;gap:5px}
+.src-tags a{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);text-decoration:none}
+.src-tags a:hover{color:var(--drug)}
+
+/* content blocks */
+.cols-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cols-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.cols-3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){.cols-2{grid-template-columns:minmax(0,1fr)}}
+.box{padding:16px;display:grid;gap:10px;align-content:start;min-width:0}
+.box h3{font-size:16px}
+.box p,.box li{font-size:14px}
+.box ul,.box ol{margin:0;padding-left:19px;display:grid;gap:4px}
+.lead-txt{font-size:15px;max-width:78ch;margin-bottom:14px}
+.callout{border-radius:var(--r);padding:12px 14px;background:var(--warn-soft);color:var(--ink);font-size:14px;display:grid;gap:4px}
+.callout b{color:var(--warn)}
+.callout.crit{background:var(--crit-soft)} .callout.crit b{color:var(--crit)}
+.callout.info{background:var(--drug-soft)} .callout.info b{color:var(--drug)}
+.stack{display:grid;gap:14px}
+.calc{display:grid;gap:12px}
+.calc-in{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.calc-in label{font-size:14px;font-weight:600}
+.calc-in input[type=range]{flex:1 1 220px;accent-color:var(--lysis)}
+.calc-in output{font-family:var(--font-mono);font-size:20px;min-width:72px}
+.calc-out{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.dose{border:1px solid var(--line);border-radius:9px;padding:11px 12px;display:grid;gap:4px;background:var(--surface)}
+.dose .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.dose .v{font-family:var(--font-mono);font-size:19px;font-variant-numeric:tabular-nums}
+.dose .s{font-size:12.5px;color:var(--muted)}
+.dose.warnb{border-color:var(--warn)}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.checks li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;font-size:14px}
+.checks li::before{content:"";width:12px;height:12px;border-radius:3px;border:1.6px solid var(--muted);margin-top:5px}
+.checks.x li::before{border-color:var(--crit);background:linear-gradient(45deg,transparent 44%,var(--crit) 44% 56%,transparent 56%),linear-gradient(-45deg,transparent 44%,var(--crit) 44% 56%,transparent 56%)}
+.refs{display:grid;gap:8px;font-size:14px;padding-left:20px;margin:0}
+.refs li span{color:var(--muted);font-size:12.5px}
+footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);display:grid;gap:6px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+
+<div class="wrap">
+<header class="masthead">
+  <div>
+    <p class="eyebrow">응고 생리 · 혈전 병태 · 항혈전제 약리</p>
+    <h1>혈전 약리 시뮬레이터</h1>
+    <p class="lede">혈관이 다친 순간부터 혈소판 마개, 트롬빈 폭발, 피브린 안정화, 섬유소 용해까지 직접 돌려 봅니다. 약물을 켜면 어느 단계가 막히고 출혈 경향이 어떻게 변하는지 바로 보입니다.</p>
+  </div>
+  <div class="meta">
+    <span class="tag">근거 확인 <b>2026-11-14</b></span>
+    <span class="tag">원본 <b>약학 폴더 통합가이드</b></span>
+    <span class="tag">2026 AHA/ASA · 2025 ACC/AHA · 2024 ESC</span>
+    <span class="tag">성인 · 교육용 정성 모형</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="섹션 이동">
+  <ul>
+    <li><a href="#sim">시뮬레이터</a></li>
+    <li><a href="#compare">세 계열 비교</a></li>
+    <li><a href="#map">표적 지도</a></li>
+    <li><a href="#guide">약물 가이드</a></li>
+    <li><a href="#lytic">혈전용해제</a></li>
+    <li><a href="#clinical">질환별 선택</a></li>
+    <li><a href="#safety">상호작용·검사·시술</a></li>
+    <li><a href="#refs">근거</a></li>
+  </ul>
+</nav>
+
+<section id="sim" class="block" aria-labelledby="sim-h">
+  <div class="sec-head">
+    <h2 id="sim-h">혈관 속에서 일어나는 일</h2>
+    <p>시나리오를 고르고 재생하세요. 오른쪽에서 약물을 켜고 끄면 같은 혈관에서 바로 결과가 달라집니다. 혈전용해제는 혈전이 생긴 뒤 ‘투여’를 누릅니다.</p>
+  </div>
+  <div class="sim-grid">
+    <div class="card stage">
+      <div class="stage-top">
+        <div class="seg" role="tablist" aria-label="시나리오" id="scenTabs">
+          <button role="tab" id="tab-normal" data-scen="normal" aria-selected="true">정상 지혈</button>
+          <button role="tab" id="tab-arterial" data-scen="arterial" aria-selected="false">동맥 혈전</button>
+          <button role="tab" id="tab-venous" data-scen="venous" aria-selected="false">정맥 혈전</button>
+        </div>
+        <div class="scen-opts" id="scenOpts"></div>
+      </div>
+      <p class="scen-desc" id="scenDesc"></p>
+      <div class="canvas-box">
+        <canvas id="cv" aria-label="혈관 단면 시뮬레이션" role="img"></canvas>
+        <div class="hud"><span class="pill" id="hudStatus"><i class="dot"></i><span>대기</span></span><span class="hud-drugs" id="hudDrugs"></span></div>
+      </div>
+      <div class="legend" aria-label="범례">
+        <span><i class="sw rbc"></i>적혈구</span>
+        <span><i class="sw plt"></i>휴지기 혈소판</span>
+        <span><i class="sw pla"></i>활성 혈소판</span>
+        <span><i class="sw fib"></i>피브린(굵을수록 교차결합)</span>
+        <span><i class="sw lys"></i>플라스민 작용</span>
+      </div>
+      <div class="transport">
+        <button class="btn primary" id="btnPlay" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="playIcon" d="M4 2.5v11l9-5.5z"/></svg><span>일시정지</span></button>
+        <button class="btn" id="btnReset" type="button">처음부터</button>
+        <div class="seg" id="speedSeg" aria-label="재생 속도">
+          <button type="button" data-sp="0.5" aria-pressed="false">0.5×</button>
+          <button type="button" data-sp="1" aria-pressed="true">1×</button>
+          <button type="button" data-sp="2" aria-pressed="false">2×</button>
+          <button type="button" data-sp="4" aria-pressed="false">4×</button>
+        </div>
+        <span class="tlabel mono" id="tLabel">t = 0.0 s</span>
+      </div>
+      <ol class="phases" id="phases" aria-label="진행 단계"></ol>
+      <div class="phase-note" id="phaseNote" aria-live="polite"></div>
+    </div>
+
+    <aside class="rail" aria-label="측정값과 약물">
+      <div class="card panel">
+        <div class="panel-h"><h3>현재 상태</h3><span class="kicker">상대값</span></div>
+        <div class="meters">
+          <div class="meter"><span>혈소판 마개</span><span class="bar"><i id="mPlt" style="background:var(--platelet)"></i></span><span class="v" id="vPlt">0</span></div>
+          <div class="meter"><span>트롬빈</span><span class="bar"><i id="mThr" style="background:var(--fibrin)"></i></span><span class="v" id="vThr">0</span></div>
+          <div class="meter"><span>피브린</span><span class="bar"><i id="mFib" style="background:var(--fibrin)"></i></span><span class="v" id="vFib">0</span></div>
+          <div class="meter"><span>교차결합</span><span class="bar"><i id="mX" style="background:var(--fibrin)"></i></span><span class="v" id="vX">0</span></div>
+          <div class="meter"><span>플라스민</span><span class="bar"><i id="mPls" style="background:var(--lysis)"></i></span><span class="v" id="vPls">0</span></div>
+          <div class="meter"><span>피브리노겐</span><span class="bar"><i id="mFbg" style="background:var(--muted)"></i></span><span class="v" id="vFbg">100</span></div>
+        </div>
+        <div class="outcome" id="outcome"></div>
+        <div class="outcome">
+          <div class="out-row"><span>출혈 경향 <span class="kicker">(약물 조합)</span></span><b id="riskTxt">기본</b></div>
+          <div class="risk" id="riskBar"><i></i><i></i><i></i><i></i></div>
+          <div class="risk-lbl"><span>기본</span><span>증가</span><span>높음</span><span>매우 높음</span></div>
+        </div>
+      </div>
+      <div class="card panel">
+        <div class="panel-h"><h3>약물 적용</h3><button class="btn small" id="btnClear" type="button">모두 해제</button></div>
+        <div id="drugPanel"></div>
+      </div>
+      <div class="card panel">
+        <div class="panel-h"><h3>주의 알림</h3><span class="kicker" id="alertCnt"></span></div>
+        <div class="alerts" id="alerts"></div>
+      </div>
+    </aside>
+  </div>
+  <p class="disclaimer">이 시뮬레이터는 기전을 보여 주는 교육용 정성 모형입니다. 막대와 %는 상대값이며 실제 혈중농도, 검사수치, 출혈 확률이 아닙니다. 시간은 실제의 분·시간·일 단위를 수십 초로 압축했습니다. 와파린은 효과 발현에 수일이 걸리지만 이 모형은 치료 INR에 도달한 상태를 가정합니다.</p>
+</section>
+
+<section id="compare" class="block" aria-labelledby="cmp-h">
+  <div class="sec-head">
+    <h2 id="cmp-h">세 계열은 표적도 목표도 다르다</h2>
+    <p>항혈소판제와 항응고제는 새 혈전이 생기고 자라는 것을 막습니다. 이미 생긴 혈전을 녹이는 것은 혈전용해제뿐입니다.</p>
+  </div>
+  <div class="tbl-wrap">
+    <table class="cmp">
+      <thead><tr><th scope="col">구분</th><th scope="col">항혈소판제</th><th scope="col">항응고제</th><th scope="col">혈전용해제</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">표적</th><td>혈소판의 효소·수용체: COX-1, P2Y₁₂, PDE3, 5-HT₂A, GPIIb/IIIa</td><td>응고인자: VKORC1(II·VII·IX·X 기능화), 안티트롬빈 매개 Xa·IIa, 직접 Xa, 직접 IIa</td><td>플라스미노겐 → 플라스민 전환, 주로 피브린에 결합한 부위</td></tr>
+        <tr><th scope="row">치료 목표</th><td>혈소판 활성화·응집을 막아 새 혈소판 혈전(백색 혈전)을 예방</td><td>트롬빈·피브린 생성을 줄여 혈전의 생성·성장·재발을 억제</td><td>이미 막힌 혈관의 피브린을 분해해 빠르게 재관류. 늦을수록 이득이 줄어듦</td></tr>
+        <tr><th scope="row">이미 생긴 혈전</th><td>녹이지 못함</td><td>녹이지 못함. 성장이 멈추면 체내 섬유소용해가 서서히 제거</td><td>직접 분해</td></tr>
+        <tr><th scope="row">대표 상황</th><td>ACS·PCI 후, 비심인성 허혈성 뇌졸중·TIA, 증상 있는 PAD</td><td>심방세동, DVT·PE, 기계판막, ACS 급성기·PCI 시술 중</td><td>급성 허혈성 뇌졸중(4.5시간 이내, 선택적 9시간), PCI가 늦어지는 STEMI(12시간 이내), 지속 저혈압 동반 고위험 PE</td></tr>
+        <tr><th scope="row">핵심 주의</th><td>위장관 출혈, PPI·NSAIDs 상호작용, 스텐트 후 임의 중단 금지, 수술 전 중단 기간</td><td>신기능별 용량, CYP3A4·P-gp·CYP2C9 상호작용, 와파린 INR·식이, 헤파린 HIT</td><td>두개내출혈, 시간창·금기, 투여 전 혈압 &lt;185/110 · 후 &lt;180/105, 24시간 항혈전제 보류, 혈관부종</td></tr>
+        <tr><th scope="row">검사</th><td>정기 모니터링 검사 없음(Hb·출혈 증상)</td><td>와파린 INR, UFH aPTT/anti-Xa, DOAC는 CrCl·Hb</td><td>검사 결과를 기다리느라 투여를 늦추지 않음(이상 의심 시 혈소판·INR), 출혈 시 피브리노겐</td></tr>
+        <tr><th scope="row">출혈 시</th><td>특이 길항제 없음. 비가역 약물은 혈소판 수명(7~10일) 동안 효과 지속</td><td>비타민 K·4인자 PCC, 프로타민, 이다루시주맙, Xa 억제제는 PCC 등 기관 프로토콜</td><td>즉시 중단, 동결침전제제(피브리노겐 ≥150 mg/dL 목표), 트라넥삼산</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="map" class="block" aria-labelledby="map-h">
+  <div class="sec-head">
+    <h2 id="map-h">약물이 꽂히는 자리: 표적 지도</h2>
+    <p>노드를 누르면 그 단계의 생리와 작용 약물이, 약물 알약을 누르면 상세 가이드가 열립니다. 시뮬레이터에서 켠 약물은 파랗게 채워집니다.</p>
+  </div>
+  <div class="map-grid">
+    <div class="card">
+      <div class="map-legend">
+        <span><i class="sw" style="background:var(--platelet)"></i>항혈소판제</span>
+        <span><i class="sw" style="background:var(--fibrin)"></i>항응고제</span>
+        <span><i class="sw" style="background:var(--lysis)"></i>혈전용해제</span>
+        <span><i class="sw" style="background:var(--muted)"></i>역전·지혈제</span>
+        <span><i class="sw" style="background:var(--drug)"></i>연구 중</span>
+        <span>점선 상자 = 천연 억제계 · 점선 화살표 = 억제</span>
+      </div>
+      <div class="map-box" id="mapBox"></div>
+    </div>
+    <div class="card info" id="mapInfo" aria-live="polite"></div>
+  </div>
+</section>
+
+<section id="guide" class="block" aria-labelledby="guide-h">
+  <div class="sec-head">
+    <h2 id="guide-h">약물별 가이드</h2>
+    <p>각 약물을 표적, 치료 목표, 주의 핵심 순서로 정리했습니다. 용량은 성인 대표 용법이며 실제 처방에는 국내 최신 허가사항이 우선합니다.</p>
+  </div>
+  <div class="filters">
+    <div class="seg" id="clsSeg" aria-label="계열">
+      <button type="button" data-cls="all" aria-pressed="true">전체</button>
+      <button type="button" data-cls="ap" aria-pressed="false">항혈소판제</button>
+      <button type="button" data-cls="ac" aria-pressed="false">항응고제</button>
+      <button type="button" data-cls="ly" aria-pressed="false">혈전용해제</button>
+      <button type="button" data-cls="rv" aria-pressed="false">역전·지혈제</button>
+    </div>
+    <div class="search"><label class="vh" for="q">약물 검색</label><input id="q" type="search" placeholder="이름·표적·상품명 검색 (예: P2Y12, 엘리퀴스)"></div>
+  </div>
+  <div class="guide-grid">
+    <div class="dcards" id="dcards"></div>
+    <article class="card detail" id="detail" aria-live="polite"></article>
+  </div>
+</section>
+
